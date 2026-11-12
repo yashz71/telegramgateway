@@ -175,6 +175,8 @@ async def set_webhook(webhook_url: str, secret_token: str | None = None):
     payload = {
         "url": webhook_url,
         "allowed_updates": ["message"],
+        "drop_pending_updates": "True",
+
     }
 
     if secret_token:

@@ -17,6 +17,10 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.2.0",
     "ngrok>=1.7.0",
     "python-multipart>=0.0.33",
+    "transformers>=5.22.2",
+    "huggingface-hub>=2.2.0",
+    "torch==2.14.1",
+    "openai>=3.48.0",
 ]
 
 [project.scripts]

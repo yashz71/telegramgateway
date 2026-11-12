@@ -8,6 +8,9 @@ from typing import Optional
 from pydantic import BaseModel
 
 from dotenv import load_dotenv
+import asyncio
+from services.transcription import create_transcription_client
+
 
 # Load environment variables before importing modules that use them.
 load_dotenv()
@@ -29,6 +32,7 @@ from agent.utils.robin.workflow import build_robin
 from agent.startup.mcp_robin import initialize_mcp_robin
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from agent.utils.config import NEON_DATABASE_URL
+#from services.transcription import load_whisper
 
 
 logging.basicConfig(
@@ -69,7 +73,11 @@ async def lifespan(app: FastAPI):
         # --------------------------------------------------
         # 1. Initialize MCP servers
         # --------------------------------------------------
+        logger.info("Loading Whisper Base...")
+        #app.state.whisper_pipe = await asyncio.to_thread(load_whisper)
+        app.state.transcription_client = create_transcription_client()
 
+        logger.info("Whisper Base loaded successfully.")
        
         mcp_robin = await initialize_mcp_robin()
         # --------------------------------------------------
@@ -132,6 +140,7 @@ async def lifespan(app: FastAPI):
         await set_webhook(
             webhook_url=webhook_url,
             secret_token=webhook_secret,
+
         )
 
         webhook_info = await get_webhook_info()
@@ -150,7 +159,7 @@ async def lifespan(app: FastAPI):
 
         # The checkpointer stays open while FastAPI is running.
         yield
-
+        await app.state.transcription_client.close()
         logger.info("MaintiDoc is shutting down.")
 
 

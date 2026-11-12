@@ -67,7 +67,9 @@ async def receive_telegram_update(request: Request):
         await handle_telegram_message(
             message=message,
             agent_app=agent_app,
-            )
+            transcription_client=request.app.state.transcription_client,
+            #whisper_pipe=request.app.state.whisper_pipe,
+        )
     except Exception:
         logger.exception(
             "Failed to process Telegram update %s",

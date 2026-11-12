@@ -9,7 +9,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langchain_core.messages import HumanMessage
 
 from services.telegram import download_file, send_text_message
-
+from services.transcription import transcribe_audio
 logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path("uploads/telegram")
@@ -139,6 +139,7 @@ async def run_maintidoc_agent(
 async def handle_telegram_message(
     message: dict,
     agent_app,
+    transcription_client
 ) -> None:
     """Normalize and process an incoming Telegram message."""
 
@@ -156,7 +157,7 @@ async def handle_telegram_message(
 
     message_id = message.get("message_id")
 
-    # Telegram sends either text or a caption for a photo.
+    # Text or caption.
     message_text = (
         message.get("text")
         or message.get("caption")
@@ -164,31 +165,111 @@ async def handle_telegram_message(
     )
 
     photo_path = None
+    audio_path = None
 
     photos = message.get("photo", [])
 
+    # Telegram can send either voice messages or audio files.
+    voice = message.get("voice")
+    audio = message.get("audio")
+
     try:
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+        # -----------------------------------------
+        # 1. Handle photos
+        # -----------------------------------------
         if photos:
-            # Telegram provides multiple resolutions.
             largest_photo = photos[-1]
             file_id = largest_photo["file_id"]
 
-            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-            destination = (
-                UPLOAD_DIR / f"{uuid4().hex}.jpg"
-            )
+            destination = UPLOAD_DIR / f"{uuid4().hex}.jpg"
 
             photo_path = str(
                 await download_file(file_id, destination)
             )
 
+        # -----------------------------------------
+        # 2. Handle audio / voice messages
+        # -----------------------------------------
+        audio_file = voice or audio
+
+        if audio_file:
+            file_id = audio_file["file_id"]
+
+            # Voice messages are normally OGG/Opus.
+            # Audio files may be MP3, M4A, etc.
+            if voice:
+                extension = ".ogg"
+            else:
+                extension = Path(
+                    audio_file.get("file_name", "audio.mp3")
+                ).suffix or ".mp3"
+
+            destination = (
+                UPLOAD_DIR / f"{uuid4().hex}{extension}"
+            )
+
+            audio_path = str(
+                await download_file(file_id, destination)
+            )
+
+            logger.info(
+                "Transcribing Telegram audio: chat=%s file=%s",
+                chat_id,
+                audio_path,
+            )
+
+            # Transcribe without blocking the async event loop.
+            transcription = await transcribe_audio(
+                transcription_client=transcription_client,
+                #whisper_pipe=whisper_pipe,
+                audio_path=audio_path,
+            )
+            if not transcription:
+                await send_text_message(
+                    chat_id,
+                    "I couldn't understand the audio. "
+                    "Please try recording it again.",
+                )
+                return
+
+            logger.info(
+                "Audio transcription completed: chat=%s text=%s",
+                chat_id,
+                transcription,
+            )
+
+            # Combine caption and transcription if both exist.
+            if message_text.strip():
+                message_text = (
+                    f"{message_text.strip()}\n\n"
+                    f"Audio transcription: {transcription}"
+                )
+            else:
+                message_text = transcription
+
+        # -----------------------------------------
+        # 3. Validate incoming message
+        # -----------------------------------------
         if not message_text.strip() and not photo_path:
             await send_text_message(
                 chat_id,
-                "Please send a text message or a photo.",
+                "Please send a text message, photo, "
+                "voice message, or audio file.",
             )
             return
+
+        # -----------------------------------------
+        # 4. Log message type
+        # -----------------------------------------
+        message_type = (
+            "photo+audio" if photo_path and audio_path
+            else "photo+text" if photo_path and message_text
+            else "photo" if photo_path
+            else "audio" if audio_path
+            else "text"
+        )
 
         logger.info(
             "Processing Telegram message: chat=%s sender=%s "
@@ -196,11 +277,12 @@ async def handle_telegram_message(
             chat_id,
             sender_id,
             message_id,
-            "photo+text" if photo_path and message_text
-            else "photo" if photo_path
-            else "text",
+            message_type,
         )
 
+        # -----------------------------------------
+        # 5. Invoke MaintiDoc agent
+        # -----------------------------------------
         response = await run_maintidoc_agent(
             agent_app=agent_app,
             chat_id=chat_id,
@@ -224,6 +306,11 @@ async def handle_telegram_message(
         )
 
     finally:
-        # The image is no longer needed after the graph finishes.
+        # -----------------------------------------
+        # 6. Clean up temporary files
+        # -----------------------------------------
         if photo_path:
             Path(photo_path).unlink(missing_ok=True)
+
+        if audio_path:
+            Path(audio_path).unlink(missing_ok=True)
