@@ -15,7 +15,7 @@ from services.transcription import create_transcription_client
 # Load environment variables before importing modules that use them.
 load_dotenv()
 
-import ngrok
+#import ngrok
 from fastapi import FastAPI, Header
 
 from routes.telegram import router as telegram_router
@@ -47,17 +47,17 @@ approved_drafts = {}
 
 
  
-def connect_ngrok():
-    forwarder = ngrok.forward(
-        "localhost:8085",
-        authtoken_from_env=True,
-        domain="among-aged-mammogram.ngrok-free.dev",
-    )
+# def connect_ngrok():
+#     forwarder = ngrok.forward(
+#         "localhost:8085",
+#         authtoken_from_env=True,
+#         domain="among-aged-mammogram.ngrok-free.dev",
+#     )
 
-    public_url = forwarder.url()
-    logger.info("Ngrok tunnel available at: %s", public_url)
+#     public_url = forwarder.url()
+#     logger.info("Ngrok tunnel available at: %s", public_url)
 
-    return public_url
+#     return public_url
 
 
 
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     import uvicorn
 
     # Start the tunnel before the FastAPI server.
-    connect_ngrok()
+    #connect_ngrok()
 
     uvicorn.run(
         app,
