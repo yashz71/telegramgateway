@@ -8,8 +8,8 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from langchain_core.messages import HumanMessage
 
-from services.telegram import download_file, send_text_message
-from services.transcription import transcribe_audio
+from telegramegateway.services.telegram import download_file, send_text_message
+from telegramegateway.services.transcription import transcribe_audio
 logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path("uploads/telegram")

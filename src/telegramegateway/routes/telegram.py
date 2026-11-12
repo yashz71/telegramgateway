@@ -4,12 +4,12 @@ import logging
 
 from fastapi import APIRouter, Request, HTTPException
 
-from services.telegram import (
+from telegramegateway.services.telegram import (
     send_text_message,
     download_file,
 )
 
-from services.telegram_handler import handle_telegram_message
+from telegramegateway.services.telegram_handler import handle_telegram_message
 
 router = APIRouter(
     prefix="/webhook/telegram",
