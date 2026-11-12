@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from agent.utils.config import base_url, api_key
+from telegramegateway.agent.utils.config import base_url, api_key
 
 model = ChatOpenAI(
     model="gpt-4.1-nano",

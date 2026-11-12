@@ -1,9 +1,9 @@
 from langgraph.graph import END
-from agent.utils.state import AgentState
-from agent.utils.robin.prompt import robin_agent_prompt
+from telegramegateway.agent.utils.state import AgentState
+from telegramegateway.agent.utils.robin.prompt import robin_agent_prompt
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import AIMessage
-import agent.startup.mcp_robin as mcp
+import telegramegateway.agent.startup.mcp_robin as mcp
 from langchain_core.messages import HumanMessage
 
 

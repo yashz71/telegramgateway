@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph, START, END
 
-from agent.utils.state import AgentState
-from agent.utils.robin.nodes import (
+from telegramegateway.agent.utils.state import AgentState
+from telegramegateway.agent.utils.robin.nodes import (
     call_model,
     should_continue,
     prepare_tools
