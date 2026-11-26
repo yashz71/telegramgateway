@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import certifi
 import httpx
 from dotenv import load_dotenv
 
@@ -26,32 +27,58 @@ class TelegramAPIError(Exception):
     pass
 
 
+# Shared HTTP client
+_client: httpx.AsyncClient | None = None
+
+
+async def initialize_telegram_client():
+    global _client
+
+    if _client is None:
+        _client = httpx.AsyncClient(
+            verify=certifi.where(),
+            timeout=30.0,
+        )
+
+
+async def close_telegram_client():
+    global _client
+
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    if _client is None:
+        raise RuntimeError("Telegram HTTP client is not initialized")
+
+    return _client
+
+
 async def _api_request(
     method: str,
     payload: dict | None = None,
 ) -> Any:
-    """Make a JSON POST request to the Telegram Bot API."""
+    client = _get_client()
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            f"{TELEGRAM_API_URL}/{method}",
-            json=payload or {},
+    response = await client.post(
+        f"{TELEGRAM_API_URL}/{method}",
+        json=payload or {},
+    )
+
+    response.raise_for_status()
+    data = response.json()
+
+    if not data.get("ok"):
+        raise TelegramAPIError(
+            data.get("description", "Telegram API request failed")
         )
 
-        response.raise_for_status()
-        data = response.json()
-
-        if not data.get("ok"):
-            raise TelegramAPIError(
-                data.get("description", "Telegram API request failed")
-            )
-
-        return data["result"]
+    return data["result"]
 
 
 async def get_me() -> dict:
-    """Verify the bot token and retrieve bot information."""
-
     return await _api_request("getMe")
 
 
@@ -59,12 +86,6 @@ async def get_updates(
     offset: int | None = None,
     timeout: int = 30,
 ) -> list[dict]:
-    """
-    Retrieve updates using long polling.
-
-    Only use this when a webhook is NOT configured.
-    """
-
     payload = {
         "timeout": timeout,
         "allowed_updates": ["message"],
@@ -80,8 +101,6 @@ async def send_text_message(
     chat_id: int,
     text: str,
 ) -> dict:
-    """Send a text message to a Telegram chat."""
-
     return await _api_request(
         "sendMessage",
         {
@@ -96,8 +115,6 @@ async def send_photo(
     photo_path: str | Path,
     caption: str | None = None,
 ) -> dict:
-    """Upload and send a photo using multipart/form-data."""
-
     photo_path = Path(photo_path)
 
     if not photo_path.is_file():
@@ -108,34 +125,33 @@ async def send_photo(
     if caption:
         data["caption"] = caption
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        with photo_path.open("rb") as photo:
-            response = await client.post(
-                f"{TELEGRAM_API_URL}/sendPhoto",
-                data=data,
-                files={
-                    "photo": (
-                        photo_path.name,
-                        photo,
-                        "application/octet-stream",
-                    )
-                },
-            )
+    client = _get_client()
 
-        response.raise_for_status()
-        result = response.json()
+    with photo_path.open("rb") as photo:
+        response = await client.post(
+            f"{TELEGRAM_API_URL}/sendPhoto",
+            data=data,
+            files={
+                "photo": (
+                    photo_path.name,
+                    photo,
+                    "application/octet-stream",
+                )
+            },
+        )
 
-        if not result.get("ok"):
-            raise TelegramAPIError(
-                result.get("description", "Could not send photo")
-            )
+    response.raise_for_status()
+    result = response.json()
 
-        return result["result"]
+    if not result.get("ok"):
+        raise TelegramAPIError(
+            result.get("description", "Could not send photo")
+        )
+
+    return result["result"]
 
 
 async def get_file(file_id: str) -> dict:
-    """Retrieve metadata for a Telegram file."""
-
     return await _api_request(
         "getFile",
         {"file_id": file_id},
@@ -146,8 +162,6 @@ async def download_file(
     file_id: str,
     destination: str | Path,
 ) -> Path:
-    """Download a Telegram file to local storage."""
-
     file_info = await get_file(file_id)
 
     file_path = file_info.get("file_path")
@@ -158,25 +172,28 @@ async def download_file(
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.get(
-            f"{TELEGRAM_FILE_URL}/{file_path}"
-        )
-        response.raise_for_status()
+    client = _get_client()
+
+    response = await client.get(
+        f"{TELEGRAM_FILE_URL}/{file_path}",
+        timeout=60.0,
+    )
+
+    response.raise_for_status()
 
     destination.write_bytes(response.content)
 
     return destination
 
 
-async def set_webhook(webhook_url: str, secret_token: str | None = None):
-    """Register the FastAPI endpoint with Telegram."""
-
+async def set_webhook(
+    webhook_url: str,
+    secret_token: str | None = None,
+):
     payload = {
         "url": webhook_url,
         "allowed_updates": ["message"],
-        "drop_pending_updates": "True",
-
+        "drop_pending_updates": True,
     }
 
     if secret_token:
@@ -186,6 +203,4 @@ async def set_webhook(webhook_url: str, secret_token: str | None = None):
 
 
 async def get_webhook_info():
-    """Retrieve the current Telegram webhook configuration."""
-
     return await _api_request("getWebhookInfo")

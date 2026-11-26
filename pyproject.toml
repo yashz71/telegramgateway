@@ -21,6 +21,10 @@ dependencies = [
     "huggingface-hub>=2.2.0",
     "torch==2.14.1",
     "openai>=3.48.0",
+    "livekit-agents[langchain]~=1.8",
+    "telethon>=1.46.0",
+    "certifi>=2026.10.23",
+    "langchain-tavily>=0.2.18",
 ]
 
 [project.scripts]

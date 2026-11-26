@@ -34,6 +34,7 @@ def call_model(state: AgentState):
 
     response = agent_chain.invoke({
         "messages": state["messages"],
+        "instruction": state.get("supervisor_instruction"),
         "summary": state.get("summary", "No previous summary available."),
     })
 

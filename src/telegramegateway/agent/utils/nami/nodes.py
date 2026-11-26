@@ -1,15 +1,18 @@
 from langgraph.graph import END
 from agent.utils.state import AgentState
 from agent.utils.models.llm import model
-from agent.utils.accounting_agent.prompt import accountant_agent_prompt
+from agent.utils.nami.prompt import nami_agent_prompt
 from langgraph.prebuilt import ToolNode
 from langchain_core.messages import AIMessage
-import agent.startup.mcp_accountant as mcp
+from agent.utils.nami.tools import search_tool
+tools = [search_tool]
+tool_node = ToolNode(tools)
+model_with_tools = model.bind_tools(tools)
 
 
 # 3. Define the Node Functions
 def call_model(state: AgentState):
-    agent_chain = accountant_agent_prompt | mcp.accounting_model_with_tools
+    agent_chain = nami_agent_prompt | model_with_tools
 
     response = agent_chain.invoke({
         "messages": state["messages"],
@@ -21,7 +24,7 @@ def call_model(state: AgentState):
 
     # Only write the final answer once the model is done calling tools
     if not (isinstance(response, AIMessage) and response.tool_calls):
-        updates["nami"] = response.content
+        updates["nami_answer"] = response.content
 
     return updates
 

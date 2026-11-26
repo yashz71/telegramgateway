@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, START, END
 from agent.utils.state import AgentState
 from agent.utils.nami.nodes import (
     call_model,
+    tool_node,
     should_continue
 )
 
@@ -10,7 +11,7 @@ from agent.utils.nami.nodes import (
 # =========================================================
 # GRAPH INITIALIZATION
 # =========================================================
-def build_nami(tool_node):
+def build_nami():
 
     nami = StateGraph(AgentState)
 

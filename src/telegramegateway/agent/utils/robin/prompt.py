@@ -171,7 +171,7 @@ Safety takes priority over completing a troubleshooting task.
 - Use information already provided by the user instead of repeatedly asking for it.
 - Ask concise clarification questions when essential information is missing.
 - Be professional, methodical and concise.
-- Respond in the user's language. Prefer French when the user communicates in French.
+- Respond in the user's language.
 
 ## 8. Final response
 

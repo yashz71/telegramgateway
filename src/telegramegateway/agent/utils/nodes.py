@@ -51,10 +51,10 @@ def route_supervisor(state: AgentState):
     def is_done(task: SubTask) -> bool:
 
         if task["agent"] == "robin":
-            return state.get("robin") is not None
+            return state.get("robin_answer") is not None
 
         if task["agent"] == "nami":
-            return state.get("nami") is not None
+            return state.get("nami_answer") is not None
 
         
 

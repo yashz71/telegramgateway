@@ -15,14 +15,21 @@ from telegramegateway.services.telegram import (
     get_me,
     set_webhook,
     get_webhook_info,
+    initialize_telegram_client,
+    close_telegram_client,
 )
+from agent.utils.workflow import build_workflow
+from agent.utils.nami.workflow import build_nami
+import httpx
 
 from telegramegateway.agent.utils.robin.workflow import build_robin
 from telegramegateway.agent.startup.mcp_robin import initialize_mcp_robin
 from telegramegateway.agent.utils.config import NEON_DATABASE_URL
-
+import ngrok
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-
+# from livekit.agents import AgentSession
+# from livekit.plugins import langchain
+# #langchain.LLMAdapter(graph=create_graph(), stream_mode=["messages", "custom"])
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +38,20 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
+
+
+def connect_ngrok():
+     forwarder = ngrok.forward(
+         "localhost:8085",
+        authtoken_from_env=True,
+        domain="among-aged-mammogram.ngrok-free.dev",
+     )
+
+     public_url = forwarder.url()
+     logger.info("Ngrok tunnel available at: %s", public_url)
+
+     return public_url
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -76,8 +97,10 @@ async def lifespan(app: FastAPI):
             # 4. Build LangGraph workflow
             logger.info("Building Robin workflow...")
 
-            workflow = build_robin(mcp_robin["tool_node"])
+            nami = build_nami()
 
+            robin = build_robin(mcp_robin["tool_node"])
+            workflow = build_workflow(robin, nami)
             app.state.agent_app = workflow.compile(
                 checkpointer=saver
             )
@@ -86,7 +109,15 @@ async def lifespan(app: FastAPI):
 
             # 5. Connect to Telegram
             logger.info("Connecting to Telegram...")
+# Initialize Telegram HTTP client
+            logger.info("Initializing Telegram HTTP client...")
 
+            await initialize_telegram_client()
+            stack.push_async_callback(close_telegram_client)
+
+            logger.info("Telegram HTTP client initialized.")
+
+            # Connect to Telegram
             bot = await get_me()
 
             logger.info(
@@ -140,3 +171,15 @@ async def root():
         "status": "running",
         "service": "MaintiDoc",
     }
+
+if __name__ == "__main__":
+    import uvicorn
+
+# Start the tunnel before the FastAPI server.
+    connect_ngrok()
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8085,
+    )

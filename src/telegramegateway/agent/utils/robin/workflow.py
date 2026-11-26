@@ -48,4 +48,4 @@ def build_robin(tool_node):
     robin.add_edge("prepare_tools", "tools")
     robin.add_edge("tools", "agent")
 
-    return robin
+    return robin.compile()

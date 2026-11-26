@@ -11,9 +11,9 @@ from langchain_core.messages import HumanMessage
 from telegramegateway.services.telegram import download_file, send_text_message
 from telegramegateway.services.transcription import transcribe_audio
 logger = logging.getLogger(__name__)
+from langchain_core.messages import AIMessage
 
 UPLOAD_DIR = Path("uploads/telegram")
-
 
 
 def fresh_turn_state(user_message: HumanMessage) -> dict:
@@ -23,11 +23,57 @@ def fresh_turn_state(user_message: HumanMessage) -> dict:
         "parallel": True,
         "reasoning": None,
         "supervisor_instruction": None,
-        "accounting_answer": None,
-        "tax_answer": None,
-        "general_answer": None,
-        "download_url": None,
+        "robin_answer": None,
+        "nami_answer": None,
+        "summary": "",
     }
+
+
+def extract_text(content) -> str:
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, list):
+        return "\n".join(
+            block["text"]
+            for block in content
+            if isinstance(block, dict)
+            and block.get("type") == "text"
+            and block.get("text")
+        ).strip()
+
+    return str(content).strip() if content else ""
+
+
+def extract_final_answer(result: dict) -> str:
+
+    answers = []
+
+    robin_answer = extract_text(result.get("robin_answer"))
+    nami_answer = extract_text(result.get("nami_answer"))
+
+    if robin_answer:
+        answers.append(robin_answer)
+
+    if nami_answer:
+        answers.append(nami_answer)
+
+    if answers:
+        return "\n\n".join(answers)
+
+    # Fallback: only accept an actual AI response,
+    # never return the user's HumanMessage.
+    messages = result.get("messages", [])
+
+    for message in reversed(messages):
+        if isinstance(message, AIMessage) and not message.tool_calls:
+            answer = extract_text(message.content)
+
+            if answer:
+                return answer
+
+    return "I couldn't generate a response. Please try again."
+
 
 
 def build_multimodal_message(
@@ -90,6 +136,7 @@ async def run_maintidoc_agent(
 
     Each Telegram chat has its own persistent LangGraph thread.
     """
+    
     thread_id = f"telegram:{chat_id}"
     user_message = build_multimodal_message(
         message_text=message_text,
@@ -105,35 +152,26 @@ async def run_maintidoc_agent(
     }
 
     result = await agent_app.ainvoke(
-        input_state,
-        config=config,
-    )
+    input_state,
+    config=config,
+    )    
+    logger.info("========== GRAPH RESULT ==========")
 
-    messages = result.get("messages", [])
+    logger.info("Plan: %s", result.get("plan"))
+    logger.info("Robin answer: %s", result.get("robin_answer"))
+    logger.info("Nami answer: %s", result.get("nami_answer"))
 
-    if not messages:
-        return "I couldn't generate a response. Please try again."
+    for index, msg in enumerate(result.get("messages", [])):
+        logger.info(
+            "Message %s | type=%s | content=%s | tool_calls=%s",
+            index,
+            type(msg).__name__,
+            getattr(msg, "content", None),
+            getattr(msg, "tool_calls", None),
+        )
 
-    final_message = messages[-1]
-
-    # Most LangGraph chat workflows return an AIMessage here.
-    answer = getattr(final_message, "content", "")
-
-    if isinstance(answer, str):
-        return answer.strip()
-
-    # Handle structured content responses where possible.
-    if isinstance(answer, list):
-        text_parts = [
-            block["text"]
-            for block in answer
-            if isinstance(block, dict)
-            and block.get("type") == "text"
-            and block.get("text")
-        ]
-        return "\n".join(text_parts).strip()
-
-    return str(answer)
+    logger.info("========== END GRAPH RESULT ==========")
+    return extract_final_answer(result)
 
 
 async def handle_telegram_message(
